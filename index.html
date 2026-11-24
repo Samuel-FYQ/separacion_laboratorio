@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Laboratorio virtual de separación de mezclas</title>
+<style>
+:root{--bg:#eef2f0;--ink:#14282d;--tl:#0f4c5c;--am:#f2b134;--ln:#c3d0cc}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.45 "Trebuchet MS",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;background:var(--tl);color:#fff}
+h1{font-size:1.25rem;margin:0}header p{margin:0;opacity:.85;font-size:.9rem}
+button{font:inherit;cursor:pointer;border:2px solid var(--tl);background:#fff;color:var(--tl);border-radius:8px;padding:6px 12px;min-height:40px}
+button:hover{background:#e2f0f2}button[aria-pressed=true],nav button[aria-selected=true]{background:var(--tl);color:#fff}
+header button{border-color:#fff;background:transparent;color:#fff}header button:hover{background:#ffffff22}
+:focus-visible{outline:3px solid var(--am);outline-offset:2px}
+nav{display:flex;gap:6px;flex-wrap:wrap;padding:12px 16px 0}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;padding:12px 16px 20px}
+canvas{width:100%;height:auto;aspect-ratio:8/5;background:#f9fbfa;border:2px solid var(--tl);border-radius:10px;touch-action:none;cursor:grab}
+.panel{background:#fff;border:1px solid var(--ln);border-radius:10px;padding:12px}
+h2{font-size:1.1rem;margin:0 0 4px}.panel p{margin:4px 0}
+#ctl{display:grid;gap:8px;margin:10px 0}#ctl label{display:grid;gap:2px}#ctl input[type=range]{width:100%}
+.seg{display:flex;gap:4px;flex-wrap:wrap}.seg button{flex:1}
+#msg{min-height:4.4em;padding:8px;background:#e8f3f1;border-left:5px solid var(--tl);border-radius:6px}
+fieldset{margin:12px 0 0;border:1px solid var(--ln);border-radius:8px}
+#qo{display:grid;gap:6px}
+body.zen header p{display:none}
+@media(max-width:860px){.main{grid-template-columns:1fr}}
+</style></head><body>
+<header><div><h1>Laboratorio virtual de separación de mezclas</h1><p>Física y Química · 2.º ESO</p></div><div><button id="fs">Pantalla completa</button> <button id="rl">Reiniciar laboratorio</button></div></header>
+<nav id="tabs" role="tablist" aria-label="Técnicas de separación"></nav>
+<div class="main"><canvas id="cv" role="img" aria-label="Mesa de laboratorio interactiva"></canvas>
+<aside class="panel"><h2 id="tt"></h2><p id="ms"></p><div id="ctl"></div><p id="msg" role="status" aria-live="polite"></p><button id="rs">Reiniciar muestra</button>
+<fieldset><legend>¿Qué propiedad has aprovechado?</legend><div id="qo"></div><p id="qf"></p></fieldset></aside></div>
+<script>
+const $=s=>document.querySelector(s),cv=$('#cv'),g=cv.getContext('2d');cv.width=1280;cv.height=800;g.scale(2,2);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),rd=(a,b)=>a+Math.random()*(b-a),pc=v=>Math.round(clamp(v,0,1)*100),now=()=>performance.now()/1e3;
+const W='#5aa9e6',SA='#d9bf86',GR='#8b8f94',LV='#cdbbe8',GL='#3b5568';
+const R=(x,y,w,h,c,s)=>{g.fillStyle=c;g.fillRect(x,y,w,h);if(s){g.strokeStyle=s;g.lineWidth=1.5;g.strokeRect(x,y,w,h)}};
+const P=(p,c,s,lw=3,cl=0)=>{g.beginPath();p.forEach((q,i)=>g[i?'lineTo':'moveTo'](q[0],q[1]));if(cl||c)g.closePath();if(c){g.fillStyle=c;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=lw;g.stroke()}};
+const C=(x,y,r,c)=>{g.beginPath();g.arc(x,y,r,0,7);g.fillStyle=c;g.fill()};
+const T_=(s,x,y,c='#14282d')=>{g.font='600 13px "Trebuchet MS",sans-serif';g.textAlign='left';g.lineWidth=3;g.strokeStyle='#f9fbfa';g.strokeText(s,x,y);g.fillStyle=c;g.fillText(s,x,y)};
+const BK=(x,y,w,h,l,c)=>{R(x+1,y+h*(1-l),w-2,h*l,c);P([[x,y],[x,y+h],[x+w,y+h],[x+w,y]],0,GL)};
+const gp=(x,y,w,h,r=10)=>{g.beginPath();g.moveTo(x,y);g.lineTo(x,y+h-r);g.quadraticCurveTo(x,y+h,x+r,y+h);g.lineTo(x+w-r,y+h);g.quadraticCurveTo(x+w,y+h,x+w,y+h-r);g.lineTo(x+w,y)};
+const JAR=(x,y,w,h,fn)=>{g.save();gp(x,y,w,h);g.closePath();g.clip();fn();g.restore();gp(x,y,w,h);g.strokeStyle=GL;g.lineWidth=3;g.stroke();g.strokeStyle='#789';g.lineWidth=1.5;for(let i=1;i<5;i++){const yy=y+h*.15+h*.7*i/5;g.beginPath();g.moveTo(x+w-3,yy);g.lineTo(x+w-(i%2?10:15),yy);g.stroke()}R(x-3,y-3,w+6,3,'rgba(200,225,235,.9)');R(x+4,y+8,2.5,h-22,'rgba(255,255,255,.65)')};
+const SED=(x,y,w,h,sd)=>{R(x,y,w,h,'#d9bf86');for(let i=0;i<Math.ceil(w*h/18);i++){const a=Math.sin(i*12.99+sd)*4375.8,b=Math.sin(i*78.2+sd)*1234.5;C(x+w*(a-Math.floor(a)),y+h*(b-Math.floor(b)),1.3,i%2?'#b8964f':'#e9d6a6')}};
+const erp=(cx,t,b,wb,wn,nh)=>{const r=10;g.beginPath();g.moveTo(cx-wn/2,t);g.lineTo(cx-wn/2,t+nh);g.lineTo(cx-wb/2,b-r);g.quadraticCurveTo(cx-wb/2,b,cx-wb/2+r,b);g.lineTo(cx+wb/2-r,b);g.quadraticCurveTo(cx+wb/2,b,cx+wb/2,b-r);g.lineTo(cx+wn/2,t+nh);g.lineTo(cx+wn/2,t)};
+const ERL=(cx,t,b,wb,wn,nh,fn)=>{g.save();erp(cx,t,b,wb,wn,nh);g.closePath();g.clip();fn();g.restore();erp(cx,t,b,wb,wn,nh);g.strokeStyle=GL;g.lineWidth=3;g.stroke();R(cx-wn/2-3,t-3,wn+6,3,'rgba(200,225,235,.9)')};
+const CRY=(x,y,z)=>{R(x,y,z,z,'rgba(255,255,255,.92)','#8aa');R(x+z*.2,y+z*.2,z*.6,z*.6,'rgba(205,225,240,.9)')};
+const bench=()=>{R(0,340,640,60,'#d6e0dd');R(0,338,640,4,'#9fb3ad')};
+let S,ci=0,dyn=[],lm='',done=[];
+try{done=JSON.parse(localStorage.getItem('lvsm3'))||[]}catch(e){}
+const sv=()=>{try{localStorage.setItem('lvsm3',JSON.stringify(done))}catch(e){}};
+
+const T=[
+{n:'Filtración',mix:'Agua y arena',miss:'Separa la arena del agua y recoge el agua en otro recipiente.',
+ init:()=>({paper:0,tilt:0,bk:1,fun:0,col:0,ps:0,cs:0}),
+ ui:[{c:'chk',l:'Poner papel de filtro',k:'paper'},{c:'rng',l:'Inclinar el vaso para verter',k:'tilt',max:100}],
+ step(dt){const s=S;if(!s.paper&&s.ps>0){s.cs+=s.ps;s.ps=0}
+  if(s.tilt>25&&s.bk>0){const m=Math.min(s.bk,(s.tilt-25)/75*.35*dt);s.bk-=m;s.fun+=m*.8;if(s.paper)s.ps+=m*.2;else s.cs+=m*.2}
+  const d=Math.min(s.fun,(s.paper?.1:.3)*dt);s.fun-=d;s.col+=d},
+ draw(){bench();const s=S,pour=s.tilt>25&&s.bk>0,a=s.tilt*.0105,f=s.cs/.2,cl=Math.min(1,s.col/.8);
+  R(470,70,8,270,'#6b7780');R(440,336,70,6,'#6b7780');R(384,196,88,5,'#6b7780');
+  g.save();g.translate(240,150);g.rotate(a);
+  JAR(-90,0,90,110,()=>{if(s.bk<.003)return;const y0=110-100*s.bk;
+   g.save();g.translate(-45,y0);g.rotate(-a);R(-300,0,600,300,pour?'rgba(185,205,160,.85)':'rgba(120,190,235,.55)');g.restore();
+   SED(-90,110-22*s.bk,90,22*s.bk,3);
+   if(pour)for(let i=0;i<14;i++)C(-80+((i*37+now()*60)%75),30+((i*53)%70),1.6,'#c9a96a')});
+  g.restore();
+  if(pour){g.beginPath();g.moveTo(240,152);g.quadraticCurveTo(295,158,314,196);g.strokeStyle='rgba(165,190,150,.9)';g.lineWidth=5;g.stroke()}
+  ERL(330,292,338,90,30,16,()=>{R(280,338-34*cl,100,34*cl,f>.05?'rgba(190,190,140,.7)':'rgba(120,190,235,.55)');if(f>.05)SED(285,338-10*f,90,10*f,7)});
+  const fp=[[270,190],[390,190],[336,240],[324,240]];P(fp,'rgba(234,243,242,.7)');R(324,240,12,64,'rgba(234,243,242,.9)');
+  const lv=Math.min(1,s.fun/.8),ya=s.paper?238:240,yr=s.paper?184:190,hw=s.paper?54:60;
+  if(s.paper){P([[276,184],[384,184],[330,238]],'#fffaf0','#b5a173',2,1);P([[306,184],[330,238]],0,'#e2d6b6',1);P([[354,184],[330,238]],0,'#e2d6b6',1)}
+  if(lv>.02){const yt=ya-48*lv,w=2*hw*(ya-yt)/(ya-yr);P([[330-w/2,yt],[330+w/2,yt],[330,ya]],'rgba(90,169,230,.6)')}
+  if(s.paper&&s.ps>0){const hh=3+11*(s.ps/.2);P([[330-hh*.7,ya-hh],[330+hh*.7,ya-hh],[330,ya]],'#d9bf86')}
+  P(fp,0,GL,3,1);P([[324,240],[324,304]],0,GL);P([[336,240],[336,304]],0,GL);
+  R(372,190,16,16,'#9aa3a8','#556');
+  if(s.fun>.01)C(330,308+(now()*50)%22,3,W);
+  if(!s.paper){P([[40,334],[90,334],[65,300]],'#fffaf0','#b5a173',2,1);P([[52,334],[65,300]],0,'#e2d6b6',1);T_('Papel de filtro (sin colocar)',20,292)}
+  T_('Vaso de precipitados',20,130);if(s.paper)T_('Papel de filtro',392,170);T_('Embudo',396,236);T_('Matraz Erlenmeyer',380,318);T_('Soporte',480,90)},
+ m(){const s=S,a=pc(s.ps/.2),b=pc(s.cs/.2);
+  if(s.bk>.99&&!s.paper&&s.tilt<=25)return 'El embudo está vacío. ¿Qué necesitas poner para retener la arena?';
+  if(s.bk>.99&&s.tilt<=25)return 'Inclina el vaso con el control para verter la mezcla.';
+  if(b>5)return 'La arena ha atravesado el embudo y ensucia el agua: sin papel no se separa. Pulsa «Reiniciar muestra» y repite con papel.';
+  if(s.bk<.02&&s.fun<.02)return 'Filtración terminada: arena retenida en el papel ('+a+' %) y agua filtrada en el recipiente.';
+  return 'Filtrando… arena retenida en el papel: '+a+' %.'},
+ q:{q:0,o:['Las partículas de arena son mayores que los poros del papel','La arena es atraída por un imán','El agua es más densa que la arena'],ok:0,h:'Piensa en el tamaño de los granos y de los poros.',e:'La arena queda retenida porque sus partículas son mayores que los poros del papel. La sal disuelta, en cambio, pasaría con el agua.'}},
+
+{n:'Decantación',mix:'Agua y aceite',miss:'Recoge el agua en el vaso y deja el aceite en el embudo.',
+ init:()=>({pv:0,rs:0,fw:.5,fo:.5,ow:0,oo:0,open:0}),
+ ui:[{c:'btn',l:'Verter la mezcla en el embudo',f:()=>{S.pv=1}},{c:'btn',l:'Dejar reposar',f:()=>{if(S.pv&&!S.rs)S.rs=.001}},{c:'hold',l:'Abrir la llave (mantén pulsado)',k:'open'}],
+ step(dt){const s=S;if(s.rs>0&&s.rs<1)s.rs=Math.min(1,s.rs+dt*.5);
+  if(s.open&&s.rs>=1&&s.fw+s.fo>0){const m=Math.min(s.fw+s.fo,.1*dt);if(s.fw>0){const a=Math.min(s.fw,m);s.fw-=a;s.ow+=a}else{s.fo-=m;s.oo+=m}}},
+ draw(){bench();const s=S,V=s.fw+s.fo,fl=s.open&&s.rs>=1&&V>0,wt=250-s.fw*185,ot=250-V*185,
+  FN=()=>{g.beginPath();g.moveTo(305,24);g.lineTo(305,55);g.bezierCurveTo(240,75,228,120,232,150);g.bezierCurveTo(238,190,296,205,306,248);g.lineTo(306,292);g.lineTo(314,292);g.lineTo(314,248);g.bezierCurveTo(324,205,382,190,388,150);g.bezierCurveTo(392,120,380,75,315,55);g.lineTo(315,24)};
+  R(452,20,8,320,'#6b7780');R(420,336,80,6,'#6b7780');R(388,116,66,5,'#6b7780');
+  g.save();FN();g.closePath();g.fillStyle='rgba(234,243,242,.6)';g.fill();g.clip();
+  if(s.pv&&V>.003){
+   if(s.rs<1){R(200,ot,200,292-ot,'rgba(120,190,235,.5)');for(let i=0;i<50;i++){const a=Math.sin(i*12.9)*4375,b=Math.sin(i*78.2)*1234,c=Math.sin(i*5.3)*999;C(235+150*(a-Math.floor(a)),ot+(250-ot)*(b-Math.floor(b)),2+3*(c-Math.floor(c)),'rgba(232,185,35,.9)')}}
+   if(s.rs){g.globalAlpha=s.rs;R(200,wt,200,292-wt,'rgba(120,190,235,.7)');R(200,ot,200,wt-ot,'rgba(235,190,50,.8)');g.globalAlpha=1}}
+  g.restore();FN();g.strokeStyle=GL;g.lineWidth=3;g.stroke();
+  P([[300,26],[320,26],[323,10],[297,10]],'#e9e4da','#8a8272',2,1);
+  R(302,262,16,14,'#e9eeee',GL);R(318,266,30,6,s.open?'#1a7f4b':'#c0392b');
+  if(s.rs>=1&&s.fw>.005){g.setLineDash([5,4]);P([[232,wt],[388,wt]],0,'#333',1.5);g.setLineDash([]);T_('Aceite · 0,92 g/cm³',20,(ot+wt)/2+4);T_('Agua · 1,00 g/cm³',20,(wt+250)/2+4)}
+  JAR(250,300,100,38,()=>{R(250,338-s.ow*38-s.oo*38,100,s.oo*38,'rgba(235,190,50,.8)');R(250,338-s.ow*38,100,s.ow*38,'rgba(120,190,235,.65)')});
+  if(fl)C(310,294+(now()*70)%20,3,s.fw>0?W:'#e8b923');
+  T_('Tapón',330,20);T_('Llave de paso: '+(s.open?'abierta':'cerrada'),352,276);T_('Vaso colector',20,330);T_('Soporte',410,90);if(!s.pv)T_('Embudo de decantación vacío',20,60)},
+ m(){const s=S;if(!s.pv)return 'El embudo de decantación está vacío. Vierte la mezcla con la llave cerrada.';
+  if(s.rs<1)return s.rs?'Los líquidos se ordenan según su densidad…':'La mezcla está revuelta. Déjala reposar.';
+  if(s.oo>.03)return 'Ha caído aceite al vaso. Pulsa «Reiniciar muestra» y suelta la llave antes.';
+  if(s.fw<.005)return s.open?'Suelta la llave: ya solo queda aceite.':'Conseguido: el agua está en el vaso y el aceite en el embudo.';
+  return 'Mantén pulsada la llave para que salga el agua; suéltala cuando la separación entre capas llegue abajo.'},
+ q:{o:['Los dos líquidos se evaporan a la vez','Tienen distinta densidad y no se mezclan, así que forman capas','El agua es atraída por la llave'],ok:1,h:'Piensa por qué el agua queda abajo.',e:'El agua, más densa, forma la capa inferior y sale primero por la llave; el aceite, menos denso, queda arriba.'}},
+
+{n:'Imantación',mix:'Arena y limaduras de hierro',miss:'Retira el hierro con el imán y déjalo en su recipiente; la arena debe quedarse en la bandeja.',
+ init(){const p=[];for(let i=0;i<150;i++)p.push({x:rd(50,420),y:rd(225,330),t:0,c:Math.random()<.5});for(let i=0;i<70;i++)p.push({x:rd(50,420),y:rd(225,330),t:1,st:0,dep:0,a:rd(0,3.14)});return{tool:0,mx:130,my:110,drag:0,p}},
+ ui:[{c:'sel',k:'tool',o:[['Imán',0],['Regla de plástico',1]]}],
+ ptr(t,x,y){const s=S;if(t=='d')s.drag=1;if(t=='u')s.drag=0;if(s.drag&&x!=null){s.mx=clamp(x,20,620);s.my=clamp(y,40,330)}},
+ step(dt){const s=S,z=s.mx>440&&s.my>200;
+  s.p.forEach(q=>{if(q.t!=1||q.dep)return;
+   if(q.st){if(z){q.st=0;q.dep=1;q.x=rd(450,610);q.y=rd(305,332);return}q.x+=(s.mx+q.ox-q.x)*Math.min(1,dt*12);q.y+=(s.my+q.oy-q.y)*Math.min(1,dt*12);return}
+   if(s.tool)return;const dx=s.mx-q.x,dy=s.my+16-q.y,d=Math.hypot(dx,dy);
+   if(d<16){q.st=1;q.ox=rd(-16,16);q.oy=rd(14,30)}else if(d<95){const v=(60+300*(1-d/95))*dt;q.x+=dx/d*v;q.y+=dy/d*v}})},
+ draw(){bench();const s=S;R(40,215,390,123,'#eef1ee','#9fb3ad');R(46,221,378,111,'#f5f7f4');R(40,331,390,7,'#cfd8d4');
+  JAR(440,250,170,88,()=>{R(440,250,170,88,'rgba(235,243,243,.6)')});
+  s.p.forEach(q=>{if(q.t){g.strokeStyle='#2a2a2a';g.lineWidth=1.6;g.beginPath();g.moveTo(q.x-2.5*Math.cos(q.a),q.y-2.5*Math.sin(q.a));g.lineTo(q.x+2.5*Math.cos(q.a),q.y+2.5*Math.sin(q.a));g.stroke()}else C(q.x,q.y,2,q.c?'#d9bf86':'#c4a15a')});
+  T_('Bandeja con arena y limaduras de hierro',40,206);T_('Vaso para el hierro',450,244);
+  if(s.tool){R(s.mx-45,s.my-5,90,10,'rgba(142,197,232,.8)','#456');for(let i=1;i<9;i++)R(s.mx-45+i*10,s.my-5,1,i%2?4:7,'#456');T_('Regla de plástico',s.mx-45,s.my-12)}
+  else{g.strokeStyle='#c0392b';g.lineWidth=9;g.beginPath();g.moveTo(s.mx-14,s.my+6);g.lineTo(s.mx-14,s.my-8);g.arc(s.mx,s.my-8,14,Math.PI,0);g.lineTo(s.mx+14,s.my+6);g.stroke();
+   R(s.mx-19,s.my+6,10,10,'#c8ccd0','#667');R(s.mx+9,s.my+6,10,10,'#c8ccd0','#667');T_('Imán de herradura',s.mx+24,s.my-14)}},
+ m(){const s=S,n=s.p.filter(q=>q.t==1),d=n.filter(q=>q.dep).length,k=n.filter(q=>q.st).length;
+  if(s.tool)return 'La regla de plástico no atrae al hierro. Cambia de herramienta.';
+  if(d>=64)return 'Separación conseguida: '+d+' de 70 limaduras en su recipiente y toda la arena sigue en la bandeja.';
+  return 'Arrastra el imán sobre la bandeja y llévalo al recipiente del hierro. Pegadas al imán: '+k+' · Separadas: '+d+' de 70.'},
+ q:{o:['El hierro es más denso que la arena','El hierro es atraído por el imán y la arena no','El hierro se disuelve en agua'],ok:1,h:'La arena no reacciona al imán.',e:'El hierro es atraído por el imán y la arena no, por eso se pueden separar.'}},
+
+{n:'Tamizado',mix:'Arena y grava',miss:'Elige la malla adecuada y agita el tamiz para que pase solo la arena.',
+ init(){const a=[];for(let i=0;i<50;i++)a.push({d:rd(4,6),rx:rd(-92,92),ry:rd(-14,-2),s:0,col:Math.random()<.5?'#d9bf86':'#c9a96a'});for(let i=0;i<14;i++)a.push({d:rd(14,20),rx:rd(-85,85),ry:rd(-26,-9),s:0,col:['#8b8f94','#9c8f80','#7a7d80'][i%3],sh:Array.from({length:6},Math.random)});return{mesh:1,cx:320,ox:0,E:0,auto:0,drag:0,px:0,shk:0,g:a}},
+ ui:[{c:'sel',k:'mesh',o:[['Malla muy fina',0],['Malla media',1],['Malla muy gruesa',2]]},{c:'btn',l:'Agitar el tamiz (2 s)',f:()=>{S.auto=2}}],
+ ptr(t,x){const s=S;if(t=='d'){s.drag=1;s.px=x;s.cx=clamp(x,120,520)}else if(t=='u')s.drag=0;else if(s.drag){s.E=Math.min(60,s.E+Math.abs(x-s.px)*.9);s.px=x;s.cx=clamp(x,120,520)}},
+ step(dt){const s=S,H=[3,10,24][s.mesh];if(s.auto>0){s.auto-=dt;s.E=30;s.ox=Math.sin(now()*40)*14}else{s.ox=0;s.E=Math.max(0,s.E-dt*80)}
+  if(s.E>10)s.shk+=dt;
+  s.g.forEach(q=>{if(q.s==0&&s.E>10&&q.d<H&&Math.random()<dt*4){q.s=1;q.fx=s.cx+q.rx;q.y=150;q.ty=rd(322,336)}
+   else if(q.s==1){q.y+=330*dt;if(q.y>=q.ty){q.y=q.ty;q.s=2}}})},
+ draw(){bench();const s=S,sx=s.cx+s.ox,H=[3,10,24][s.mesh];R(10,326,620,14,'#d7dde0','#9fb3ad');
+  R(sx-100,104,7,50,'#b8903d','#7a5c1e');R(sx+93,104,7,50,'#b8903d','#7a5c1e');R(sx-104,101,208,4,'#c9a14a','#7a5c1e');R(sx-100,150,200,6,'#555');for(let x=sx-96;x<sx+94;x+=H+5)R(x,150,H,6,'#f9fbfa');R(sx-104,155,208,4,'#b8903d','#7a5c1e');
+  s.g.forEach(q=>{const x=q.s?q.fx:sx+q.rx,y=q.s?q.y:150+q.ry-q.d/2;if(q.sh){g.beginPath();for(let k=0;k<6;k++){const an=k*1.047,r=q.d/2*(.8+.4*q.sh[k]);g[k?'lineTo':'moveTo'](x+r*Math.cos(an),y+r*Math.sin(an))}g.closePath();g.fillStyle=q.col;g.fill();g.strokeStyle='#555';g.lineWidth=1;g.stroke()}else C(x,y,q.d/2,q.col)});
+  T_('Tamiz: '+['malla muy fina','malla media','malla muy gruesa'][s.mesh],20,40);T_('Bandeja de recogida',24,320);if(s.cx<400)T_('Arrastra el tamiz de lado a lado',sx-90,92)},
+ m(){const s=S,a=s.g.filter(q=>q.d<7&&q.s).length,b=s.g.filter(q=>q.d>13&&q.s).length;
+  if(b)return 'La grava también ha pasado ('+b+' de 14): los agujeros son demasiado grandes. Cambia de malla y pulsa «Reiniciar muestra».';
+  if(s.shk>2&&!a)return 'No cae nada: los agujeros son más pequeños que los granos. Prueba con otra malla.';
+  if(a>=45)return 'Separación conseguida: la arena ha caído a la bandeja y la grava queda retenida en el tamiz.';
+  return a?'Arena que ha pasado: '+a+' de 50. Sigue agitando.':'Arrastra el tamiz de lado a lado (o pulsa «Agitar») y observa qué granos pasan.'},
+ q:{o:['La atracción magnética','La diferencia de tamaño de los granos','La diferencia de densidad'],ok:1,h:'¿Qué distingue a la arena de la grava a simple vista?',e:'Pasan los granos menores que los agujeros y quedan los mayores. Una malla muy fina lo retiene todo y una muy gruesa lo deja pasar todo.'}},
+
+{n:'Evaporación a sequedad',mix:'Agua salada',miss:'Recupera la sal como sólido eliminando toda el agua, sin perder sal.',
+ init:()=>({L:1,heat:0,tm:0,lost:0,sp:[]}),
+ ui:[{c:'rng',l:'Potencia de la llama',k:'heat',max:100}],
+ step(dt){const s=S;if(s.heat>0&&s.L>0){s.L=Math.max(0,s.L-s.heat/100*.045*dt);s.tm+=dt*s.heat/10;
+   if(s.heat>75&&s.L<.4&&s.L>0){const k=(s.heat-75)/25;s.lost=Math.min(.6,s.lost+k*.1*dt);if(Math.random()<k*dt*14)s.sp.push({x:300,y:268,vx:rd(-110,110),vy:-rd(90,170)})}}
+  s.sp.forEach(q=>{q.x+=q.vx*dt;q.y+=q.vy*dt;q.vy+=500*dt});s.sp=s.sp.filter(q=>q.y<345)},
+ draw(){bench();const s=S,B=()=>{g.beginPath();g.moveTo(230,254);g.quadraticCurveTo(300,334,370,254);g.closePath()},fh=s.heat>0?4+s.heat*.24:0;
+  P([[210,298],[190,338]],0,'#444',4);P([[390,298],[410,338]],0,'#444',4);R(205,296,190,5,'#444');R(215,292,170,4,'#9aa3a8');for(let x=219;x<383;x+=8)R(x,292,1,4,'#6b7780');
+  R(280,334,40,6,'#444');R(293,312,14,24,'#8a8f94','#555');R(291,322,18,5,'#c0392b');
+  if(fh){const w=4+fh*.25;P([[300-w,312],[300,312-fh],[300+w,312]],'rgba(255,150,40,.9)');P([[300-w*.5,312],[300,312-fh*.55],[300+w*.5,312]],'rgba(90,120,255,.9)')}
+  B();g.fillStyle='#f6f1e8';g.fill();if(s.L>0){g.save();B();g.clip();R(215,294-38*s.L,170,60,'rgba(120,190,235,.6)');g.restore()}
+  else for(let i=0;i<26*(1-s.lost);i++){const a=Math.sin(i*12.99)*4375.8,b=Math.sin(i*78.2)*1234.5;R(268+60*(a-Math.floor(a)),283+8*(b-Math.floor(b)),6,5,'#fff','#678')}
+  B();g.strokeStyle='#b9ad98';g.lineWidth=3;g.stroke();R(226,251,148,4,'#ece4d4','#b9ad98');
+  if(s.heat>0&&s.L>0)for(let i=0;i<Math.ceil(s.heat/35);i++){const x=260+i*40,o=(now()*30+i*12)%40;g.strokeStyle='#8aa';g.lineWidth=3;g.beginPath();g.moveTo(x,246-o);g.quadraticCurveTo(x+10,236-o,x,226-o);g.stroke()}
+  s.sp.forEach(q=>{C(q.x,q.y,3,'#789');C(q.x,q.y,2,'#fff')});
+  T_('Cápsula de porcelana',385,262);T_('Rejilla',392,292);T_('Trípode',420,322);T_('Mechero Bunsen',326,350);
+  T_('Tiempo simulado: '+Math.round(s.tm)+' min',20,40);T_('Temperatura del agua: '+Math.min(100,20+s.heat*1.2|0)+' °C',20,62);if(s.L<=0)T_('Residuo sólido de sal',385,282)},
+ m(){const s=S;if(s.L<=0)return 'Solo queda la sal sólida: has recuperado el '+pc(1-s.lost)+' % de la sal. El agua se ha ido al aire: aquí no se recoge.'+(s.heat?' Apaga el mechero.':'');
+  if(s.heat>75&&s.L<.4)return '¡Salpica! Con poca agua y la llama muy fuerte la sal sale de la cápsula. Baja la potencia.';
+  return s.heat?'El agua se evapora. Cuando quede poca, baja la potencia para no perder sal.':'Sube la potencia de la llama para evaporar el agua.'},
+ q:{o:['Se elimina todo el disolvente y queda el soluto sólido','Se recoge el agua evaporada','Crecen cristales grandes y ordenados'],ok:0,h:'Piensa qué queda cuando el agua ya no está.',e:'Se evapora el agua (disolvente) y queda la sal (soluto) como residuo sólido. En esta técnica el agua no se recoge.'}},
+
+{n:'Cristalización',mix:'Disolución concentrada de sal',miss:'Deja que se evapore parte del agua y observa cuándo aparecen los cristales.',
+ init:()=>({t:0,play:0}),
+ ui:[{c:'rng',l:'Tiempo transcurrido (horas)',k:'t',max:36},{c:'btn',l:'Reproducir / pausar',f:()=>{S.play=!S.play}}],
+ step(dt){if(S.play){S.t=Math.min(36,S.t+dt*3);if(S.t>=36)S.play=0}},
+ draw(){bench();const s=S,t=s.t,L=.85-.0075*t,c=Math.min(.95,.4+.015*t);
+  JAR(160,244,320,56,()=>{R(160,300-52*L,320,52*L,'rgba(120,190,235,.55)')});
+  const n=t>15?Math.min(30,Math.floor((t-15)*1.4)):0,z=4+Math.max(0,t-15)*.3;for(let i=0;i<n;i++)CRY(175+(i*53)%280,296-(i%3)*6-z,z);
+  T_('Cristalizador de vidrio',20,280);T_('Concentración de la disolución',150,40);R(150,48,300,16,'#eef','#567');R(150,48,300*Math.min(c,.62),16,'#6ea8d8');if(c>.62)R(150+300*.62,48,300*(c-.62),16,'#e07b39');
+  R(150+300*.62-1,42,3,28,'#c0392b');T_('Saturación',150+300*.62+6,84);T_('Tiempo: '+Math.round(t)+' h',20,40);
+  if(n){T_('Cristales de sal',170,326);T_('Disolución restante',330,326)}},
+ m(){const t=S.t;if(t<1)return 'Mueve el tiempo o pulsa «Reproducir»: sin calentar, el agua se evapora muy despacio.';
+  if(t<15)return 'La disolución se concentra: todavía cabe toda la sal disuelta.';
+  if(t<30)return 'Sobresaturación: la sal ya no cabe disuelta y aparecen cristales. Aún queda disolución.';
+  return 'Hay cristales y todavía queda disolución. En la evaporación a sequedad se elimina toda el agua y solo queda un residuo sólido.'},
+ q:{o:['El agua se transforma en sal','Al evaporarse parte del agua, la sal ya no cabe disuelta','La disolución se enfría de golpe'],ok:1,h:'Piensa en cuánta agua queda para disolver la sal.',e:'Al evaporarse parte del agua llega un momento en que no toda la sal puede seguir disuelta y se forman cristales.'}},
+
+{n:'Destilación',mix:'Agua y etanol',miss:'Monta el aparato y recoge un líquido más rico en etanol que la mezcla inicial.',
+ init:()=>({p:{f:0,th:0,co:0,cl:0},cool:0,power:0,T:20,e:.3,w:.7,col:0,ce:0,boil:0}),
+ ui:[['f','Colocar el matraz con la mezcla'],['th','Colocar el termómetro'],['co','Colocar el condensador'],['cl','Colocar el recipiente colector']].map(([k,l])=>({c:'btn',l:()=>S.p[k]?l.replace('Colocar','Colocado:')+' ✓':l,f:()=>{S.p[k]=1}})).concat([{c:'chk',l:'Activar la refrigeración',k:'cool'},{c:'rng',l:'Potencia de la placa',k:'power',max:100}]),
+ step(dt){const s=S,ok=s.p.f&&s.p.th&&s.p.co&&s.p.cl,x=s.e/((s.e+s.w)||1),bp=Math.max(78.4,100-60*x),tg=s.p.f?20+s.power*1.1:20;
+  s.T+=(Math.min(tg,bp)-s.T)*Math.min(1,dt*.6);s.boil=!!(s.p.f&&s.power>5&&s.T>=bp-1&&s.e+s.w>.02);
+  if(s.boil){const dv=Math.min(s.e+s.w,.03*s.power/100*dt),y=Math.min(.95,2.6*x/(1+1.6*x)),de=Math.min(s.e,dv*y),dw=Math.min(s.w,dv-de);s.e-=de;s.w-=dw;if(ok&&s.cool){s.col+=de+dw;s.ce+=de}}},
+ draw(){bench();const s=S,p=s.p,tot=s.e+s.w,ok=p.f&&p.th&&p.co&&p.cl,f=s.col>.005?s.ce/s.col:0,GP=[[130,150],[130,110],[190,110],[470,254]];
+  R(330,70,8,270,'#6b7780');R(300,336,90,6,'#6b7780');R(52,100,7,240,'#6b7780');R(30,336,60,6,'#6b7780');R(59,168,64,5,'#6b7780');
+  R(80,286,100,36,'#464b52');R(90,322,80,16,'#6b7780');R(84,306,92,2,'#2c3035');if(s.power>0)R(86,296,88,3,`rgba(255,${170-s.power},40,${.3+s.power/150})`);T_('Manta calefactora',26,356);
+  if(p.f){g.save();g.beginPath();g.arc(130,250,46,0,7);g.clip();R(80,296-62*tot,100,62*tot,'rgba(215,200,240,.65)');if(s.boil)for(let i=0;i<5;i++)C(105+i*16,290-(now()*40+i*23)%50,2.5,'rgba(255,255,255,.9)');g.restore();
+   g.beginPath();g.arc(130,250,46,0,7);g.strokeStyle=GL;g.lineWidth=3;g.stroke();R(121,100,18,106,'rgba(225,238,240,.6)');P([[121,100],[121,206]],0,GL);P([[139,100],[139,206]],0,GL);R(116,163,28,15,'#9aa3a8','#556');T_('Matraz de destilación',184,228)}
+  else{g.setLineDash([6,4]);g.beginPath();g.arc(130,250,46,0,7);g.strokeStyle='#789';g.lineWidth=2;g.stroke();g.setLineDash([]);T_('Matraz',108,254,'#789')}
+  if(p.th){R(119,86,22,16,'#b5894d','#6e5328');R(128,48,4,70,'#fff','#555');C(130,118,3.5,'#d33');const h=8+(s.T-20)/80*54;R(129,118-h,2,h,'#d33');T_(s.T.toFixed(0)+' °C',140,62)}else T_('Termómetro',20,60,'#789');
+  if(p.co){P([[139,110],[190,110]],0,GL,15);P([[139,110],[190,110]],0,'#f1f7f8',10);P([[190,110],[470,254]],0,GL,32);P([[190,110],[470,254]],0,s.cool?'#bfe3f5':'#eef3f3',28);P([[190,110],[470,254]],0,'#7a8c94',9);P([[190,110],[470,254]],0,'#fff',6);
+   P([[470,254],[482,268]],0,GL,9);P([[470,254],[482,268]],0,'#f1f7f8',5);R(324,168,24,16,'#9aa3a8','#556');
+   P([[430,236],[430,270]],0,s.cool?'#2a6f97':'#999',5);P([[230,130],[230,86]],0,s.cool?'#2a6f97':'#999',5);
+   if(s.cool){g.setLineDash([4,6]);g.lineDashOffset=-now()*25;P([[430,270],[430,236]],0,'#fff',2);P([[230,130],[230,86]],0,'#fff',2);g.setLineDash([]);g.lineDashOffset=0}
+   if(s.boil&&ok){g.setLineDash([8,6]);g.lineDashOffset=-now()*30;P(GP,0,'#d6336c',3);g.setLineDash([]);g.lineDashOffset=0}
+   T_('Refrigerante (Liebig)',190,196);T_('Agua fría',350,278);T_('Salida',240,92)}
+  else{g.setLineDash([6,4]);P([[190,110],[470,254]],0,'#9ab',3);g.setLineDash([]);T_('Refrigerante',230,190,'#789')}
+  if(p.cl){ERL(486,258,338,88,28,18,()=>{const lv=Math.min(1,s.col/.7);R(430,338-50*lv,120,50*lv,'rgba(215,200,240,.75)')});if(s.boil&&ok&&s.cool)C(484,272+(now()*60)%30,3,LV);T_('Matraz colector',446,354)}
+  else{g.setLineDash([6,4]);g.strokeStyle='#789';g.lineWidth=2;g.strokeRect(442,258,88,80);g.setLineDash([]);T_('Matraz colector',446,354,'#789')}
+  T_('Etanol en la mezcla inicial: 30 %',360,26);R(360,34,240,12,'#eef','#567');R(360,34,72,12,LV);
+  T_('Etanol en el destilado: '+pc(f)+' %',360,70);R(360,78,240,12,'#eef','#567');R(360,78,240*f,12,LV)},
+ m(){const s=S,ok=s.p.f&&s.p.th&&s.p.co&&s.p.cl;
+  if(!ok)return 'Monta el aparato completo: matraz, termómetro, condensador y recipiente colector.';
+  if(s.power>0&&!s.cool)return 'Sin refrigeración el vapor no se vuelve líquido y escapa. Activa la refrigeración del condensador.';
+  if(!s.power)return 'Activa la refrigeración y sube la potencia de la placa.';
+  if(!s.boil)return 'La mezcla se calienta ('+s.T.toFixed(0)+' °C). Sube más la potencia hasta que hierva.';
+  return 'Hierve a '+s.T.toFixed(0)+' °C y el vapor se condensa. Etanol en el destilado: '+(s.col>.005?pc(s.ce/s.col):0)+' % (mezcla inicial: 30 %). Es más rico en etanol, pero no es etanol puro.'},
+ q:{o:['Distinto tamaño de las partículas','Distinta densidad','Distinta volatilidad: el vapor es más rico en etanol y se condensa'],ok:2,h:'El etanol hierve antes que el agua.',e:'El etanol es más volátil, así que el vapor inicial se enriquece en él. El condensador lo enfría y vuelve a líquido; el destilado no es etanol puro.'}}
+];
+
+
+const ctl=$('#ctl'),msg=$('#msg'),qo=$('#qo'),qf=$('#qf'),tb=$('#tabs');
+function tabs(){tb.innerHTML='';T.forEach((t,i)=>{const b=document.createElement('button');b.role='tab';b.setAttribute('aria-selected',i==ci);b.textContent=(i+1)+'. '+t.n+(done[i]?' ✔':'');b.onclick=()=>{ci=i;tabs();build()};tb.append(b)})}
+function build(){const t=T[ci];S=t.init();dyn=[];ctl.innerHTML='';lm='';$('#tt').textContent=t.n+': '+t.mix;$('#ms').innerHTML='<b>Misión:</b> '+t.miss;
+ t.ui.forEach(u=>{let el;
+  if(u.c=='chk'){el=document.createElement('label');el.innerHTML='<span><input type="checkbox"> '+u.l+'</span>';const i=el.querySelector('input');i.onchange=()=>{S[u.k]=+i.checked};dyn.push(()=>{i.checked=!!S[u.k]})}
+  else if(u.c=='rng'){el=document.createElement('label');el.innerHTML='<span>'+u.l+'</span><input type="range" min="0" max="'+u.max+'" value="0">';const i=el.querySelector('input');i.oninput=()=>{S[u.k]=+i.value};dyn.push(()=>{if(document.activeElement!=i)i.value=S[u.k]})}
+  else if(u.c=='sel'){el=document.createElement('div');el.className='seg';u.o.forEach(([l,v])=>{const b=document.createElement('button');b.textContent=l;b.onclick=()=>{S[u.k]=v};dyn.push(()=>b.setAttribute('aria-pressed',S[u.k]==v));el.append(b)})}
+  else{el=document.createElement('button');const l=u.l;dyn.push(()=>{const x=typeof l=='function'?l():l;if(el.textContent!=x)el.textContent=x});
+   if(u.c=='hold'){const on=()=>{S[u.k]=1},off=()=>{S[u.k]=0};el.onpointerdown=on;el.onpointerup=el.onpointerleave=el.onpointercancel=off;el.onkeydown=e=>{if(e.key==' '||e.key=='Enter'){e.preventDefault();on()}};el.onkeyup=el.onblur=off}
+   else el.onclick=()=>u.f()}
+  ctl.append(el)});
+ const q=t.q;qo.innerHTML='';qf.textContent=done[ci]?'✔ '+q.e:'';
+ q.o.forEach((o,i)=>{const b=document.createElement('button');b.textContent=o;b.onclick=()=>{if(i==q.ok){done[ci]=1;sv();qf.textContent='✔ Correcto. '+q.e;tabs()}else qf.textContent='Casi. Pista: '+q.h};qo.append(b)})}
+const pt=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)/r.width*640,(e.clientY-r.top)/r.height*400]};
+cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);const[x,y]=pt(e);T[ci].ptr&&T[ci].ptr('d',x,y)};
+cv.onpointermove=e=>{const[x,y]=pt(e);T[ci].ptr&&T[ci].ptr('m',x,y)};
+cv.onpointerup=cv.onpointercancel=()=>{T[ci].ptr&&T[ci].ptr('u')};
+$('#rs').onclick=build;
+$('#rl').onclick=()=>{if(confirm('Se borrará todo el progreso. ¿Continuar?')){done=[];sv();ci=0;tabs();build()}};
+const fsb=$('#fs'),lbl=()=>{fsb.textContent=document.fullscreenElement||document.body.classList.contains('zen')?'Salir de pantalla completa':'Pantalla completa'};
+fsb.onclick=()=>{if(document.fullscreenElement){document.exitFullscreen();return}
+ if(document.body.classList.contains('zen')){document.body.classList.remove('zen');lbl();return}
+ const z=()=>{document.body.classList.add('zen');lbl()};
+ try{document.documentElement.requestFullscreen().catch(z)}catch(x){z()}};
+document.addEventListener('fullscreenchange',lbl);
+let last=0;
+function fr(t){const dt=Math.min(.05,(t-last)/1e3||0);last=t;g.clearRect(0,0,640,400);R(0,0,640,400,'#f9fbfa');const k=T[ci];k.step&&k.step(dt);k.draw();
+ const m=k.m();if(m!==lm){msg.textContent=m;lm=m}dyn.forEach(f=>f());requestAnimationFrame(fr)}
+tabs();build();requestAnimationFrame(fr);
+</script></body></html>
